@@ -2,6 +2,7 @@ import { identity } from './environment'
 import { execFileSync } from 'node:child_process'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { app, autoUpdater, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeTheme, session, shell } from 'electron'
 import type { HostSnapshot, WindowCommand } from '../shared/ipc'
 import { devPort, HostController } from './host-controller'
@@ -20,6 +21,8 @@ import { registerSSH } from './ssh'
 import { QuitLifecycle } from './quit-lifecycle'
 import { Island } from './island'
 import { registerErrorReports } from './error-reports'
+import { isOpenableExternalURL } from '../shared/external-url'
+import { guardWindowNavigation, openLink } from './navigation-guard'
 
 /** macOS's user-facing computer name, else the host name. */
 function computerName() {
@@ -46,7 +49,7 @@ const isMac = process.platform === 'darwin'
 function rendererURL(page: string) {
   return process.env.ELECTRON_RENDERER_URL
     ? `${process.env.ELECTRON_RENDERER_URL}/?window=${page}`
-    : `file://${join(__dirname, '../renderer/index.html')}?window=${page}`
+    : `${pathToFileURL(join(__dirname, '../renderer/index.html')).href}?window=${page}`
 }
 
 const background = () => (nativeTheme.shouldUseDarkColors ? '#0A0A0A' : '#FFFFFF')
@@ -78,10 +81,8 @@ function openChat() {
   // Closing hides: the window keeps the stores (and the menu bar's data) alive.
   chat.on('close', (e) => quitLifecycle.closeToBackground(e, () => chat?.hide()))
   chat.on('closed', () => (chat = null))
-  chat.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
-    return { action: 'deny' }
-  })
+  // The chat page never navigates away from itself; allowlisted links open in the browser, the rest are refused.
+  guardWindowNavigation(chat.webContents, rendererURL('chat'), shell)
   void chat.loadURL(rendererURL('chat'))
   return chat
 }
@@ -151,10 +152,10 @@ function registerIPC(tray: Tray) {
   ipcMain.on('host:install', () => void host.install())
   ipcMain.on('host:restart', () => host.restart())
   ipcMain.on('app:openExternal', (_e, url: string) => {
-    if (/^(https?|mailto|x-apple\.systempreferences):/.test(url)) void shell.openExternal(url)
+    if (isOpenableExternalURL(url)) openLink(shell, url)
   })
   ipcMain.on('app:openSettings', (_e, url: string) => {
-    if (url.startsWith('x-apple.systempreferences:')) void shell.openExternal(url)
+    if (url.startsWith('x-apple.systempreferences:')) openLink(shell, url)
   })
   ipcMain.on('app:copy', (_e, text: string) => clipboard.writeText(text))
   ipcMain.handle('app:pickFiles', async (e) => {
