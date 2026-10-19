@@ -16,6 +16,7 @@ mod screen;
 mod service;
 mod shell;
 mod store;
+mod token_file;
 mod tui;
 mod update;
 mod usage;
@@ -305,23 +306,15 @@ fn open_store() -> Result<(store::Store, String, String)> {
     Ok((store, host_id, token))
 }
 
+fn write_token_file(token: &str) -> Result<()> {
+    token_file::write(&service::data_dir().join("token"), token)
+}
+
 fn rotate_token(store: &store::Store) -> Result<String> {
     let t = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
     store.kv_set("token", &t)?;
     write_token_file(&t)?;
     Ok(t)
-}
-
-fn write_token_file(token: &str) -> Result<()> {
-    let path = service::data_dir().join("token");
-    std::fs::write(&path, token).with_context(|| format!("writing {}", path.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-            .with_context(|| format!("restricting {}", path.display()))?;
-    }
-    Ok(())
 }
 
 #[tokio::main]
