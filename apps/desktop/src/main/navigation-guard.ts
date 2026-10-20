@@ -5,7 +5,7 @@ type Opener = Pick<typeof shell, 'openExternal'>
 
 /** Opens a link in the OS browser; a failure must not surface as an unhandled rejection. */
 export function openLink(opener: Opener, url: string) {
-  opener.openExternal(url).catch(() => {})
+  opener.openExternal(url).catch((e: unknown) => console.error(`couldn't open an external link: ${e instanceof Error ? e.message : String(e)}`))
 }
 
 /** Keeps a window on `page`: allowlisted links open outside the app, every other navigation is refused. */
