@@ -3,9 +3,21 @@ import { isOpenableExternalURL, navigationAction } from '../shared/external-url'
 
 type Opener = Pick<typeof shell, 'openExternal'>
 
-/** Opens a link in the OS browser; a failure must not surface as an unhandled rejection. */
+/** Scheme and host only: the path and query can carry data that must not reach the log. */
+function describeURL(url: string): string {
+  try {
+    const { protocol, host } = new URL(url)
+    return host ? `${protocol}//${host}` : protocol
+  } catch {
+    return 'unparseable URL'
+  }
+}
+
+/** Opens a link in the OS browser; a failure is logged, never surfaced as an unhandled rejection. */
 export function openLink(opener: Opener, url: string) {
-  opener.openExternal(url).catch(() => {})
+  opener.openExternal(url).catch((e: unknown) => {
+    console.error(`link ${describeURL(url)} couldn't open: ${e instanceof Error ? e.message : String(e)}`)
+  })
 }
 
 /** Keeps a window on `page`: allowlisted links open outside the app, every other navigation is refused. */
